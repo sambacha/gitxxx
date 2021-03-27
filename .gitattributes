@@ -1,0 +1,2 @@
+.gitignore export-ignore
+*.sh text eol=lf
