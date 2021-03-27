@@ -1,6 +1,6 @@
 # gitxxx
 
-> Git Powertoolz
+> [docs](https://mirrors.edge.kernel.org/pub/software/scm/git/docs/git-fast-import.html)
 
 ### `git filter-base`
 
