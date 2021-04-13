@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+git_check_status() {
+    # check the status
+    git status --porcelain > /tmp/.__sync.$$ 2>&1
+    grep -E '^[DAU][DAU]' /tmp/.__sync.$$ > /dev/null 2>&1
+    if [ $? = 0 ] ; then
+	echo "$1 MERGE FAILED in $(pwd)"
+	exit 1
+    fi
+}
+
+usage() {
+    echo "usage: git-clone-or-sync [-r] [-s] [-a ANNEX_REPO] REPO DIRECTORY"
+    echo "    -s:             commit and sync the directory"
+    echo "    -a ANNEX_REPO:  sync with the 'git annex' repo too"
+    echo "    -r:             no repo needed ; already cloned"
+    exit 1
+}
+
+# parse arguments
+if [ "$1" = "" ] ; then
+    # bad hack around empty first argument from ansible
+    shift
+fi
+
+stash=n
+annex="x"
+while getopts "sra:h" arg ; do
+    case $arg in
+	s) stash=y ;;
+	a) annex=$OPTARG ;;
+	r) repo="done" ;;
+	h) usage ;;
+	\?) usage ;;
+	:) usage ;;
+    esac
+done
+shift "$((OPTIND-1))" # strip processed options
+
+if [ "$repo" != "done" ] ; then
+    repo="$1"
+    shift
+fi
+dir="$1"
+
+if [ "$dir" == "" ]  ||  [ "$repo" == "" ] ; then
+    usage
+fi
+
+if [ ! -d "$dir/.git" ] ; then
+    # it doesn't exist yet, so clone it
+    git clone "$repo" "$dir"/
+    cd "$dir" || exit
+    if [ "$annex" != "x" ] ; then
+	git annex init
+	git remote add annex "$annex"
+	git pull annex master
+    fi
+else
+    cd "$dir" || exit
+
+    # check the current status
+    if [ $stash = "n" ] || [ "$(git status --porcelain | wc -l)" = 0 ] ; then
+	# sync it generically instead as we're all checked in
+	cd "$dir" || exit
+	git pull "$@"
+	git_check_status "$@"
+	git push "$@"
+    else
+
+	# XXX: what if we're not in master???
+	
+	# modifications exist and stashing is requested
+
+	# create a branch to store stuff on
+	git checkout -b __sync_$$
+	git commit -m "new changes tmp"
+
+	# refresh the base
+	git checkout master
+	git pull
+
+	# try to merge in the new branch
+	git merge __sync_$$
+	git_check_status
+	git branch -d __sync_$$
+    fi
+
+    # if [ "$annex" != "x" -o -d .git/annex ] ; then
+    # 	git annex pull annex
+    # 	git_check_status
+    # 	git annex push annex
+    # fi
+fi
+# -*- coding: utf-8 -*-
