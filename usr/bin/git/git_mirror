@@ -1,0 +1,5 @@
+#!/bi/sh
+git remote rename origin old-origin
+git remote add origin <new-remote>
+git fetch old-origin --prune
+git push --prune origin +refs/remotes/old-origin/*:refs/heads/* +refs/tags/*:refs/tags/*
