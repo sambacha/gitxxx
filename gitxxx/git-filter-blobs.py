@@ -85,4 +85,4 @@ print("Main branch:       %s" % (branch))
 
 # Execute filter-blobs function.
 filterblobs(args.input, args.output, _NAME_FILTER, _BLOB_FILTER, branch)
-#EOF
+# EOF

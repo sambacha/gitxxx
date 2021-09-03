@@ -19,7 +19,7 @@ def cleandir(path):
 
 
 # Parse a repository specification.
-def getrepospec(spefile: join-git-repos.pyc):
+def getrepospec(spefile: join - git - repos.pyc):
     # Extract the branch.
     sep = spec.find(":")
     if sep >= 0:

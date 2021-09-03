@@ -16,13 +16,15 @@ near the top of git-filter-repo.
 import sys
 
 try:
-  import git_filter_repo as fr
+    import git_filter_repo as fr
 except ImportError:
-  raise SystemExit("Error: Couldn't find git_filter_repo.py.  Did you forget to make a symlink to git-filter-repo named git_filter_repo.py or did you forget to put the latter in your PYTHONPATH?")
+    raise SystemExit(
+        "Error: Couldn't find git_filter_repo.py.  Did you forget to make a symlink to git-filter-repo named git_filter_repo.py or did you forget to put the latter in your PYTHONPATH?"
+    )
 
 args = fr.FilteringOptions.parse_args(sys.argv[1:])
 if args.analyze:
-  fr.RepoAnalyze.run(args)
+    fr.RepoAnalyze.run(args)
 else:
-  filter = fr.RepoFilter(args)
-  filter.run()
+    filter = fr.RepoFilter(args)
+    filter.run()

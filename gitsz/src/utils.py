@@ -4,6 +4,7 @@ file: gitsz.utils.py
 import re
 import subprocess
 
+
 def trim_indent(s: str) -> str:
     def process_match(match_obj):
         if match_obj is None:
@@ -15,6 +16,7 @@ def trim_indent(s: str) -> str:
     ws = min(process_match(re.match(r" +", r)) for r in rows)
 
     return "\n".join(r[ws:] for r in rows)
+
 
 def call_multiline(s: str):
     for row in trim_indent(s).split("\n"):
