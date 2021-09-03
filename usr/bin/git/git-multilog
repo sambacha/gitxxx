@@ -1,0 +1,8 @@
+#!/bin/sh
+#$ git log --format=%D%n%h%n%H%n%cI%n%B -n 1 HEAD
+# HEAD -> master, origin/master, origin/HEAD
+# 776f404
+# 776f4045c4f261f1af0e91c886493a9c83f56031
+# 2021-08-28T05:12:53-07:00
+# git clone fuzzy search
+git log --format=%D%n%h%n%H%n%cI%n%B -n 1 HEAD
