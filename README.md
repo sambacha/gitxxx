@@ -6,7 +6,7 @@
 
 ### cheatsheet
 
-` GIT_SEQUENCE_EDITOR=: git rebase -i HEAD~3`
+` GIT_SEQUENCE_EDITOR=: git rebase -i HEAD~3` <br>
 ` git -c sequence.editor=: rebase --autosquash --interactive origin/master `
 
 [source for non-interactive rebase](https://stackoverflow.com/questions/29094595/git-interactive-rebase-without-opening-the-editor/29094904#29094904)
