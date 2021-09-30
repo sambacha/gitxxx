@@ -1,10 +1,32 @@
 # gitxxx
 
-`/info/refs?service=git-receive-pack`
-
 [![Code Style: Black](https://github.com/sambacha/gitxxx/actions/workflows/black.yml/badge.svg)](https://github.com/sambacha/gitxxx/actions/workflows/black.yml)
 
 > [docs](https://mirrors.edge.kernel.org/pub/software/scm/git/docs/git-fast-import.html)
+
+### cheatsheet
+
+` GIT_SEQUENCE_EDITOR=: git rebase -i HEAD~3`
+` git -c sequence.editor=: rebase --autosquash --interactive origin/master `
+
+[source for non-interactive rebase](https://stackoverflow.com/questions/29094595/git-interactive-rebase-without-opening-the-editor/29094904#29094904)
+
+`/info/refs?service=git-receive-pack`
+
+### Git Absorb
+
+[https://github.com/tummychow/git-absorb](https://github.com/tummychow/git-absorb)
+
+You have a feature branch with a few commits. Your teammate reviewed the branch and pointed out a few bugs. You have fixes for the bugs, but you don't want to shove them all into an opaque commit that says fixes, because you believe in atomic commits. Instead of manually finding commit SHAs for git commit --fixup, or running a manual interactive rebase, do this:
+
+```sh
+git add $FILES_YOU_FIXED
+git absorb
+git rebase -i --autosquash master
+```
+
+git absorb will automatically identify which commits are safe to modify, and which indexed changes belong to each of those commits. It will then write fixup! commits for each of those changes. You can check its output manually if you don't trust it, and then fold the fixups into your feature branch with git's built-in autosquash functionality.
+
 
 ### `git filter-base`
 
