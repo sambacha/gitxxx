@@ -1,0 +1,298 @@
+#!/usr/bin/bash
+# vi: set expandtab ts=4 sw=4:
+
+SETTINGS_FILE=~/.git-redate-settings
+VERSION=v1.0.4
+
+is_git_repo() {
+    git rev-parse --show-toplevel > /dev/null 2>&1
+    result=$?
+    if test $result != 0; then
+        >&2 echo 'Not a git repo!'
+        exit $result
+  fi
+}
+
+
+make_editor_choice() {
+    echo -e "Editor selection:\n";
+    echo -e "1. VIM\n";
+    echo -e "2. NANO\n";
+    echo -e "3. Other\n"
+    echo -e "Your choice: ";
+
+    read -r CHOOSE_EDITOR
+}
+
+
+get_editor_executable() {
+    echo -e "What is the path to your prefered test editor? \n";
+    read -r EDITOR_PATH
+}
+
+is_has_editor() {
+    if [ -n "$EDITOR" ]; then
+        OUR_EDITOR="$EDITOR";
+    elif [ -f "$SETTINGS_FILE" ]; then
+        OUR_EDITOR=$(cat ${SETTINGS_FILE});
+    else
+        make_editor_choice
+        if [ "${CHOOSE_EDITOR}" == 3 ] || [ "${CHOOSE_EDITOR}" == "3" ]; then
+            get_editor_executable
+            OUR_EDITOR=${EDITOR_PATH}
+        elif [ "${CHOOSE_EDITOR}" == 1 ] || [ "${CHOOSE_EDITOR}" == "1" ]; then
+            OUR_EDITOR="vi"
+        else
+            OUR_EDITOR="nano"
+        fi
+        echo ${OUR_EDITOR} > ${SETTINGS_FILE}
+    fi
+}
+
+
+show_editor_preference() {
+    if [ -f "$SETTINGS_FILE" ]; then
+        echo "Configuration (${SETTINGS_FILE}):"
+        cat "${SETTINGS_FILE}"
+    else
+        echo "Configuration file ${SETTINGS_FILE} does not exist yet."
+    fi
+    if [ -n "$EDITOR" ]; then
+        echo "Environment EDITOR: ${EDITOR}"
+    else
+        echo "Environment variable EDITOR is not set."
+    fi
+}
+
+
+ALL=0
+COMMITS=5
+DEBUG=0
+LIMITCHUNKS=20
+
+
+while [[ $# -ge 1 ]] ; do
+    case "$1" in
+        -a| --all)
+            shift
+            ALL=1
+            ;;
+        -c| --commits)
+            shift
+            if [[ "$1" =~ ^[1-9][0-9]*$ ]]; then
+                COMMITS=$1
+                shift
+            else
+                echo "ERROR: invalid commits count: '$1'"
+                exit 2
+            fi
+            ;;
+        -d| --debug)
+            shift
+            DEBUG=1
+            ;;
+        -h| --help)
+            shift
+            echo "Parameters:"
+            echo "  -a| --all       Process all commits. Use this if number of commits is 1 or -c would reach to first commit."
+            echo "  -c| --commits N Process last N commits, default=5."
+            echo "  -d| --debug     Enable debug output."
+            echo "  -h| --help      Show this help message."
+            echo "  -v| --version   Show the version of git-redate"
+            echo "  -l| --limit N   Process commits in chunks/batches of size N, default=20."
+            show_editor_preference
+            exit 0
+            ;;
+        -v| --version)
+            shift
+            echo "${VERSION}"
+            exit 0
+            ;;
+        -l| --limit)
+            shift
+            if [[ "$1" =~ ^[1-9][0-9]*$ ]]; then
+                LIMITCHUNKS=$1
+                shift
+            else
+                echo "ERROR: invalid limit size: '$1'"
+                exit 2
+            fi
+            ;;
+        *)
+            # unknown option
+            echo "ERROR: unknown parameter: '${1}'! Use parameter '-h | --help' for a list of parameters."
+            exit 1
+            ;;
+    esac
+done
+
+
+die () {
+    echo >&2 "$(basename "$0")": "$*"
+    exit 1
+}
+
+
+# Check if working directory is a git repo
+is_git_repo
+
+
+# Check if editor preferences are set
+is_has_editor
+
+
+tmpfile=$(mktemp gitblah-XXXXX)
+[ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
+trap 'rm -f $tmpfile' EXIT
+
+
+
+
+datefmt=%cI
+if [ "$(git log -n1  --pretty=format:"$datefmt")" == "$datefmt" ]; then
+    datefmt=%ci
+fi
+
+
+if [ "${ALL}" -eq 1 ]; then
+    git log --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
+else
+    if [ -n "${COMMITS+set}" ]; then
+        git log -n "${COMMITS}" --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
+    else
+        git log -n 5 --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
+    fi
+fi
+
+
+# Add a newline to the file.
+echo '' >> "$tmpfile"
+
+
+# If the file does not end with a empty line some editors (like nano) will add one even if you save
+# the file without doing any modifications. In this case, the md5 hash is different even if the user
+# did not change any content. Adding a newline is a workaround for this.
+
+
+# Save modification timestamp of file
+TMPFILE_MOD_INITIAL_TIMESTAMP=$( openssl md5 "$tmpfile" )
+
+
+# Edit file
+${VISUAL:-${EDITOR:-${OUR_EDITOR}}} "$tmpfile"
+
+
+# Retrieve current modification timestamp of file
+TMPFILE_MOD_CURRENT_TIMESTAMP=$( openssl md5 "$tmpfile" )
+
+
+# Stop here if no changes were made
+if [[ "${TMPFILE_MOD_INITIAL_TIMESTAMP}" = "${TMPFILE_MOD_CURRENT_TIMESTAMP}" ]] ; then
+    echo "No changes made, stopping here"
+    exit 0
+fi
+
+
+if [ "${DEBUG}" -eq 1 ]; then
+    echo "The following changes will be applied:"
+    cat "$tmpfile"
+fi
+
+
+ITER=0
+COLITER=0
+declare -a COLLECTION
+
+
+COUNTCOMMITS=$(awk 'END {print NR}' "$tmpfile")
+
+
+while read -r commit || [ -n "$commit" ]; do
+    IFS="|" read -r date hash message <<< "$commit"
+    shopt -s nocasematch
+    if [[ "$date" == 'now' ]]; then
+        date=$(date +%Y-%m-%dT%H:%M:%S%z)
+    fi
+    shopt -u nocasematch
+    if [ "$datefmt" == "%cI" ]
+    then
+        DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
+    else
+        DATE_NO_SPACE="$(echo "${date}")"
+    fi
+
+
+    COMMIT_ENV=$(cat <<-END
+if [ \$GIT_COMMIT = $hash ]; then
+    export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
+    export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
+fi;
+END
+)
+
+
+    ((ITER++))
+
+
+    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) == $((LIMITCHUNKS - 1)) ]; then
+        echo "Chunk $COLITER Finished"
+    fi
+
+
+    if [ $((ITER % LIMITCHUNKS)) == 0 ]; then
+        ((COLITER++))
+
+
+        if [ "${DEBUG}" -eq 1 ]; then
+            echo "Chunk $COLITER Started"
+        fi
+
+
+    fi
+
+
+    COLLECTION[$COLITER]=${COLLECTION[COLITER]}"$COMMIT_ENV"
+    if [ "${DEBUG}" -eq 1 ]; then
+        echo "Commit $ITER/$COUNTCOMMITS Collected"
+    fi
+done < "$tmpfile"
+
+
+retCode=0
+ITERATOR=0
+for each in "${COLLECTION[@]}" ; do
+    ((ITERATOR++))
+
+
+    [ "${DEBUG}" -eq 1 ] && echo "Chunk $ITERATOR/${#COLLECTION[@]} Started"
+    if [ "${ALL}" -eq 1 ]; then
+        if [ "${DEBUG}" -eq 1 ]; then
+            git filter-branch -f --env-filter "$each" -- --all
+        else
+            git filter-branch -f --env-filter "$each" -- --all > /dev/null
+        fi
+        retCode=$?
+    else
+        if [ "${DEBUG}" -eq 1 ]; then
+            git filter-branch -f --env-filter "$each" HEAD~"${COMMITS}"..HEAD
+        else
+            git filter-branch -f --env-filter "$each" HEAD~"${COMMITS}"..HEAD > /dev/null
+        fi
+        retCode=$?
+    fi
+    [ "${DEBUG}" -eq 1 ] && echo "Chunk $ITERATOR/${#COLLECTION[@]} Finished"
+
+
+    if [ $retCode -ne 0 ] ; then
+        break
+    fi
+done
+
+
+if [[ $? = 0 && $retCode -eq 0 ]] ; then
+    echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
+else
+    echo ""
+    echo "ERROR! Please make sure you run this on a clean working directory."
+    exit 1
+fi
