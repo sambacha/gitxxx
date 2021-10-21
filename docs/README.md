@@ -146,3 +146,43 @@ to ./.gitattributes might suffice). The filter-repo command is under
 active development and you could request an "add attributes and
 renormalize" command-line option, since this seems like something people
 want to do more these days 
+
+
+
+## Recovering a commit from GitHub Reflog
+
+[source, https://objectpartners.com/2014/02/11/recovering-a-commit-from-githubs-reflog/](https://objectpartners.com/2014/02/11/recovering-a-commit-from-githubs-reflog/)
+
+```
+curl https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;/events
+```
+
+This will return a JSON response which you can read through to find the commit you lost. Use the commit message and approximate times to narrow your search. Here is an example portion of the response (I’ve deleted some info, but you should get the point):
+
+```json
+{ "id": "1970551769", "type": "PushEvent", "actor": { "id": 563541, "login": "&lt;user&gt;", "gravatar_id": "&lt;id&gt;", "url": "https://api.github.com/users/&lt;user&gt;", "avatar_url": "&lt;url&gt;" }, "repo": { "id": 9652839, "name": "&lt;user&gt;/&lt;repo&gt;", "url": "https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;" }, "payload": { "push_id": 303837533, "size": 1, "distinct_size": 1, "ref": "refs/heads/&lt;branch&gt;", "head": "a973ddd28d599c9ba128de56182f8769d2b9843b", "before": "4ef3d74316c04c892d17250f0ba251b328274e5f", "commits": [ { "sha": "384f275933d5b762cdb27175aeff1263a8a7b7f7", "author": { "email": "&lt;email&gt;", "name": "&lt;author&gt;" }, "message": "&lt;commit message&gt;", "distinct": true, "url": "https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;/commits/384f275933d5b762cdb27175aeff1263a8a7b7f7" } ] }, "public": false, "created_at": "2014-02-06T14:05:17Z" }
+```
+
+Next, use Github’s Refs API to create a new branch pointing to that commit:
+
+```sh
+curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X POST -d '{"ref":"refs/heads/D-commit", "sha":"384f275933d5b762cdb27175aeff1263a8a7b7f7"}' https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;/git/refs
+```
+
+
+Breaking down the JSON in this request we have this:
+
+```json
+{ "ref": "refs/heads/D-commit", "sha": "384f275933d5b762cdb27175aeff1263a8a7b7f7" }
+```
+
+The "ref" in the JSON is Git ref we want to create, it MUST be of the form: refs/heads/<branch>, where <branch> is the name of the branch we want to create in Git.
+The "SHA" is the commit that we want this new branch to point to.
+
+If successful Github will respond back with something like this:
+
+```sh
+HTTP/1.1 201 Created Server: GitHub.com Date: Thu, 06 Feb 2014 14:47:02 GMT Content-Type: application/json; charset=utf-8 Status: 201 Created X-RateLimit-Limit: 5000 X-RateLimit-Remaining: 4991 X-RateLimit-Reset: 1391700034 Cache-Control: private, max-age=60, s-maxage=60 ETag: "43e54fee5cf29edd01fa8bfce094ed1b" Location: https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;/git/refs/heads/D-commit Vary: Accept, Authorization, Cookie, X-GitHub-OTP X-GitHub-Media-Type: github.beta X-Content-Type-Options: nosniff Content-Length: 339 Access-Control-Allow-Credentials: true Access-Control-Expose-Headers: ETag, Link, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval Access-Control-Allow-Origin: * X-GitHub-Request-Id: 4389B15A:3E60:1D2506F:52F3A066 { "ref": "refs/heads/D-commit", "url": "https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;/git/refs/heads/D-commit", "object": { "sha": "384f275933d5b762cdb27175aeff1263a8a7b7f7", "type": "commit", "url": "https://api.github.com/repos/&lt;user&gt;/&lt;repo&gt;/git/commits/384f275933d5b762cdb27175aeff1263a8a7b7f7" } }
+```
+
+Now if you pull up your repository in Github, you will see the new branch and doing a ‘git fetch’ will retrieve that new branch to your local repository. From there you can cherry-pick or merge the commits back into your work.
