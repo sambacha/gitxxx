@@ -1,0 +1,3 @@
+#!/bin/sh
+BRANCH_NAME=$@
+git push origin --delete ${BRANCH_NAME}
