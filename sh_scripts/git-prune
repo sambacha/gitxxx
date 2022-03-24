@@ -1,2 +1,1 @@
-git reflog expire --expire=now --all
-git gc --aggressive --prune=now
+git fetch --all && git reflog expire --expire=now --all && git gc --aggressive --prune=now
