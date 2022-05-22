@@ -4,6 +4,7 @@
 
 > [docs](https://mirrors.edge.kernel.org/pub/software/scm/git/docs/git-fast-import.html)
 
+
 ### cheatsheet
 
 ` GIT_SEQUENCE_EDITOR=: git rebase -i HEAD~3` <br>
@@ -12,6 +13,59 @@
 [source for non-interactive rebase](https://stackoverflow.com/questions/29094595/git-interactive-rebase-without-opening-the-editor/29094904#29094904)
 
 `/info/refs?service=git-receive-pack`
+
+### Git Integrity
+
+> [source, https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#commit-history](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#commit-history)
+
+It is important to understand that the integrity of your repository guaranteed only if a hash collision cannot be created—that is, if an attacker were able to create the same SHA-1 hash with different data, then the child commit(s) would still be valid and the repository would have been successfully compromised. Vulnerabilities have been known in SHA-1 since 2005 that allow hashes to be computed faster than brute force, although they are not cheap to exploit. Given that, while your repository may be safe for now, there will come some point in the future where SHA-1 will be considered as crippled as MD5 is today. At that point in time, however, maybe Git will offer a secure migration solution to an algorithm like SHA-256 or better. Indeed, SHA-1 hashes were never intended to make Git cryptographically secure.
+
+
+
+```bash
+git log --show-signature \
+  | grep 'key ID' \
+  | grep -o '[A-Z0-9]\+$' \
+  | sort \
+  | uniq \
+  | xargs gpg --keyserver key.server.org --recv-keys $keys
+```
+
+
+```bash
+git log --pretty="format:^%H$t%aN$t%s$t%G?" --show-signature \
+| grep '^\^\|gpg: .*not certified' \
+| awk ''
+```
+
+```bash
+git log --pretty="format:^%H$t%aN$t%s$t%G?" --show-signature
+```
+
+```bash
+#!/bin/sh
+#
+# Validate signatures on only direct commits and merge commits for a particular
+# branch (current branch)
+##
+
+# if a ref is provided, append range spec to include all children
+chkafter="${1+$1..}"
+
+# note: bash users may instead use $'\t'; the echo statement below is a more
+# portable option (-e is unsupported with /bin/sh)
+t=$( echo '\t' )
+
+# Check every commit after chkafter (or all commits if chkafter was not
+# provided) for a trusted signature, listing invalid commits. %G? will output
+# "G" if the signature is trusted.
+git log --pretty="format:%H$t%aN$t%s$t%G?" "${chkafter:-HEAD}" --first-parent \
+  | grep -v "${t}G$"
+
+# grep will exit with a non-zero status if no matches are found, which we
+# consider a success, so invert it
+[ $? -gt 0 ]
+```
 
 ### Git Absorb
 
