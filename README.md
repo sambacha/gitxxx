@@ -67,6 +67,129 @@ git log --pretty="format:%H$t%aN$t%s$t%G?" "${chkafter:-HEAD}" --first-parent \
 [ $? -gt 0 ]
 ```
 
+## Managing Large Merges
+
+Up to this point, our discussion consisted of apply patches or merging single commits. What shall we do, then, if we receive a pull request for a certain feature or bugfix with, say, 300 commits (which I assure you is not unusual)? In such a case, we have a few options:
+
+1.  **Request that the user squash all the commits into a single commit**, thereby avoiding the problem entirely by applying the previously discussed methods. I personally dislike this option for a few reasons:
+    
+    -   We can no longer follow the history of that feature/bugfix in order to learn how it was developed or see alternative solutions that were attempted but later replaced.
+        
+    -   It renders `git bisect` useless. If we find a bug in the software that was introduced by a single patch consisting of 300 squashed commits, we are left to dig through the code and debug ourselves, rather than having Git possibly figure out the problem for us.
+        
+2.  **Adopt a security policy that requires signing only the merge commit** (forcing a merge commit to be created with `--no-ff` if needed).
+    
+    -   This is certainly the quickest solution, allowing a reviewer to sign the merge after having reviewed the diff in its entirety.
+        
+    -   However, it leaves individual commits open to exploitation. For example, one commit may introduce a payload that a future commit removes, thereby hiding it from the overall diff, but introducing terrible effect should the commit be checked out individually (e.g. by `git bisect`). Squashing all commits ([option #1](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-1)), signing each commit individually ([option #3](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-3)), or simply reviewing each commit individually before performing the merge (without signing each individual commit) would prevent this problem.
+        
+    -   This also does not fully prevent the situation mentioned in the hypothetical story at the beginning of this article—others can still commit with you as the author, but the commit would not have been signed.
+        
+    -   Preserves the SHA-1 hashes of each individual commit.
+        
+3.  **Sign each commit to be introduced by the merge.**
+    
+    -   The tedium of this chore can be greatly reduced by using http://www.gnupg.org/documentation/manuals/gnupg/Invoking-GPG\_002dAGENT.html\[ `gpg-agent`\].
+        
+    -   Be sure to carefully review _each commit_ rather than the entire diff to ensure that no malicious commits sneak into the history (see bullets for [option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2)). If you instead decide to script the sign of each commit without reviewing each individual diff, you may as well go with [option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2).
+        
+    -   Also useful if one needs to cherry-pick individual commits, since that would result in all commits having been signed.
+        
+    -   One may argue that this option is unnecessarily redundant, considering that one can simply review the individual commits without signing them, then simply sign the merge commit to signify that all commits have been reviewed ([option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2)). The important point to note here is that this option offers _proof_ that each commit was reviewed (unless it is automated).
+        
+    -   This will create a new for each (the SHA-1 hash is not preserved).
+        
+
+Which of the three options you choose depends on what factors are important and feasible for your particular project. Specifically:
+
+-   If history is not important to you, then you can avoid a lot of trouble by simply requiring the the commits be squashed ([option #1](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-1)).
+    
+-   If history _is_ important to you, but you do not have the time to review individual commits:
+    
+    -   Use [option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2) if you understand its risks.
+        
+    -   Otherwise, use [option #3](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-3), but _do not_ automate the signing process to avoid having to look at individual commits. If you wish to keep the history, do so responsibly.
+        
+
+Option #1 in the list above can easily be applied to the discussion in the previous section.
+
+### (Option #2)
+
+[Option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2) is as simple as passing the `-S` argument to `git merge`. If the merge is a fast-forward (that is, all commits can simply be applied atop of `HEAD` without any need for merging), then you would need to use the `--no-ff` option to force a merge commit.
+
+Inspecting the log, we will see the following:
+
+Notice how the merge commit contains the signature, but the two commits involved in the merge (`031f6ee` and `ce77088`) do not. Herein lies the problem—what if commit `031f6ee` contained the backdoor mentioned in the story at the beginning of the article? This commit is supposedly authored by you, but because it lacks a signature, it could actually be authored by anyone. Furthermore, if `ce77088` contained malicious code that was removed in `031f6ee`, then it would not show up in the diff between the two branches. That, however, is an issue that needs to be addressed by your security policy. Should you be reviewing individual commits? If so, a review would catch any potential problems with the commits and wouldn’t require signing each commit individually. The merge itself could be representative of “Yes, I have reviewed each commit individually and I see no problems with these changes.”
+
+If the commitment to reviewing each individual commit is too large, consider [Option #1](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-1).
+
+### (Option #3)
+
+[Option #3](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-3) in the above list makes the review of each commit explicit and obvious; with [option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2), one could simply lazily glance through the commits or not glance through them at all. That said, one could do the same with [option #3](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-3) by automating the signing of each commit, so it could be argued that this option is completely unnecessary. Use your best judgment.
+
+The only way to make this option remotely feasible, especially for a large number of commits, is to perform the audit in such a way that we do not have to re-enter our secret key passphrases for each and every commit. For this, we can use [`gpg-agent`](http://www.gnupg.org/documentation/manuals/gnupg/Invoking-GPG_002dAGENT.html), which will safely store the passphrase in memory for the next time that it is requested. Using `gpg-agent`, [we will only be prompted for the password a single time](http://stackoverflow.com/questions/9713781/how-to-use-gpg-agent-to-bulk-sign-git-tags/10263139). Depending on how you start `gpg-agent`, _be sure to kill it after you are done!_
+
+The process of signing each commit can be done in a variety of ways. Ultimately, since signing the commit will result in an entirely new commit, the method you choose is of little importance. For example, if you so desired, you could cherry-pick individual commits and then `-S --amend` them, but that would not be recognized as a merge and would be terribly confusing when looking through the history for a given branch (unless the merge would have been a fast-forward). Therefore, we will settle on a method that will still produce a merge commit (again, unless it is a fast-forward). One such way to do this is to interactively rebase each commit, allowing you to easily view the diff, sign it, and continue onto the next commit.
+
+First, we create a new branch off of `bar`—`bar-audit`—to perform the rebase on (see `bar` branch created in demonstration of [option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2)). Then, in order to step through each commit that would be merged into `master`, we perform a rebase using `master` as the upstream branch. This will present every commit that is in `bar-audit` (and consequently `bar`) that is not in `master`, opening them in your preferred editor:
+
+```
+e ce77088 Added bar
+e 031f6ee Modified bar
+
+# Rebase 652f9ae..031f6ee onto 652f9ae
+#
+# Commands:
+#  p, pick = use commit
+#  r, reword = use commit, but edit the commit message
+#  e, edit = use commit, but stop for amending
+#  s, squash = use commit, but meld into previous commit
+#  f, fixup = like "squash", but discard this commit's log message
+#  x, exec = run command (the rest of the line) using shell
+#
+# If you remove a line here THAT COMMIT WILL BE LOST.
+# However, if you remove everything, the rebase will be aborted.
+#
+```
+
+To modify the commits, replace each `pick` with `e` (or `edit`), as shown above. (In vim you can also do the following `ex` command: `:%s/^pick/e/`; adjust regex flavor for other editors). Save and close. You will then be presented with the first (oldest) commit:
+
+```
+Stopped at ce77088... Added bar
+You can amend the commit now, with
+
+        git commit --amend
+
+Once you are satisfied with your changes, run
+
+        git rebase --continue
+
+# first, review the diff (alternatively, use tig/gitk)
+$ git diff HEAD^
+# if everything looks good, sign it
+$ git commit -S --amend
+#    GPG-sign ^      ^ amend commit, preserving author, etc
+
+You need a passphrase to unlock the secret key for
+user: "Mike Gerwitz (Free Software Developer) <mike@mikegerwitz.com>"
+4096-bit RSA key, ID 8EE30EAB, created 2011-06-16
+
+[detached HEAD 5cd2d91] Added bar
+ 1 file changed, 1 insertion(+)
+ create mode 100644 bar
+
+# continue with next commit
+$ git rebase --continue
+
+# repeat.
+$ ...
+Successfully rebased and updated refs/heads/bar-audit.
+```
+
+Looking through the log, we can see that the commits have been rewritten to include the signatures (consequently, the SHA-1 hashes do not match):
+
+We can then continue to merge into `master` as we normally would. The next consideration is whether or not to sign the merge commit as we would with [option #2](https://mikegerwitz.com/2012/05/a-git-horror-story-repository-integrity-with-signed-commits#merge-2). In the case of our example, the merge is a fast-forward, so the merge commit is unnecessary (since the commits being merged are already signed, we have no need to create a merge commit using `--no-ff` purely for the purpose of signing it). However, consider that you may perform the audit yourself and leave the actual merge process to someone else; perhaps the project has a system in place where project maintainers must review the code and sign off on it, and then other developers are responsible for merging and managing conflicts. In that case, you may want a clear record of who merged the changes in.
+
 ### Git Absorb
 
 [https://github.com/tummychow/git-absorb](https://github.com/tummychow/git-absorb)
