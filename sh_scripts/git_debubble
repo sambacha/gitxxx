@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+# git-debubble - resolve merge bubbles in a git repository
+# source: https://gitlab.com/esr/git-debubble/-/tree/master/
+# BSD License
+version="1.2"
+
+mode=debubble
+delete=no
+while getopts du opt
+do
+    case $opt in
+	d) delete=yes;;
+	u) mode=undo;;
+    esac
+done
+shift $(($OPTIND - 1))
+
+head=`git rev-parse --abbrev-ref HEAD`
+debubbled=${head}-debubble
+bubbled=${head}-bubbled
+
+case $mode in
+    debubble)
+	if [ $1 ]; then
+	    patchfiles=no	
+	    for file in 00*; do
+		    if [ -f "$file" ]; then
+			    patchfiles=yes
+			    break
+		    fi
+	    done
+	    if [ "$patchfiles" = 'yes' ]; then
+	       echo "debubble: directory already contains patch files."
+	       exit 1
+	    fi
+	    git format-patch $1..HEAD
+	    git checkout $1
+	    if git branch $debubbled; then
+		git checkout master
+		git checkout $debubbled
+		if git am --committer-date-is-author-date 0*; then
+		    rm 0*
+		    if git branch --move $head $bubbled; then
+			if git branch --move $debubbled $head; then
+			    git checkout $head
+			    echo "debubble: debubbling succeeded."
+			    if [ $delete = yes ]; then
+				git branch -D $bubbled
+			    fi
+			else
+			    echo "debubble: rename of $debubbled to $head failed."
+			fi
+		    else
+			echo "debubble: rename of $head to $bubbled failed"
+			exit 1
+		    fi
+		else
+		    echo "debubble: replay failed."
+		    exit 1
+		fi
+	    else
+		echo "debubble: $debubbled branch already exists."
+		exit 1
+	    fi
+	else
+	    echo "debubble: requires a git revision."
+	fi
+	;;
+    undo)
+	if git branch | grep >/dev/null $bubbled; then
+	    git branch --move $head $debubbled
+	    git branch --move $bubbled $head
+	    git checkout $head
+	    if [ $delete = yes ]; then
+		git branch -D $debubbled
+	    fi
+	else
+	    echo "debubble: no $bubbled branch."
+	    echo $1
+	fi
+	;;
+esac
+
+# end
