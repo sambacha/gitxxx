@@ -4,6 +4,26 @@
 
 > [docs](https://mirrors.edge.kernel.org/pub/software/scm/git/docs/git-fast-import.html)
 
+## git-patching
+
+#### diff generation
+For git users:
+
+```bash
+cd program-directory
+git add # your changes
+git commit  # (write a clear patch description)
+git format-patch --stdout HEAD^ > toolname-patchname-YYYYMMDD-SHORTHASH.diff
+```
+
+For tarballs:
+```bash
+cd modified-program-directory/..
+diff -up original-program-directory modified-program-directory > \
+           toolname-patchname-RELEASE.diff
+```
+
+Don't push multiple commits patchsets. A single patch should apply all changes using patch -p1.
 
 ### cheatsheet
 
