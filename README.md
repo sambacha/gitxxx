@@ -25,6 +25,30 @@ diff -up original-program-directory modified-program-directory > \
 
 Don't push multiple commits patchsets. A single patch should apply all changes using patch -p1.
 
+
+### Pushing your changed repo history
+> https://github.com/k88hudson/git-flight-rules#i-want-to-add-an-empty-directory-to-my-repository
+
+Once you have removed your desired files, test carefully that you haven't broken anything in your repo - if you have, it is easiest to re-clone your repo to start over. To finish, optionally use git garbage collection to minimize your local .git folder size, and then force push.
+
+```bash
+git reflog expire --expire=now --all && git gc --prune=now --aggressive
+git push origin --force --tags
+```
+Since you just rewrote the entire git repo history, the git push operation may be too large, and return the error “The remote end hung up unexpectedly”. If this happens, you can try increasing the git post buffer:
+```console
+git config http.postBuffer 524288000
+```
+```console
+
+usr:~ $ git push --force
+```
+If this does not work, you will need to manually push the repo history in chunks of commits. In the command below, try increasing <number> until the push operation succeeds.
+
+```bash
+git push -u origin HEAD~<number>:refs/head/main --force
+```
+
 ### cheatsheet
 
 ` GIT_SEQUENCE_EDITOR=: git rebase -i HEAD~3` <br>
